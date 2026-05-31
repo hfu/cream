@@ -10,7 +10,7 @@ The purpose of the system is not to generate PMTiles.
 
 The purpose of the system is not to run Martin.
 
-The purpose of the system is to achieve and maintain a desired cache state.
+The purpose of the system is to achieve and maintain a desired serving state through cache reconciliation.
 
 All other components exist in support of cache.
 
@@ -55,7 +55,7 @@ C.R.E.A.M. defines two cache layers.
 
 ### Shallow Cache
 
-A resource is servable through a remote PMTiles URL.
+A resource is available through a remote PMTiles archive.
 
 Example:
 
@@ -99,7 +99,13 @@ MATERIALIZED
 SHALLOW_CACHED
   ↓
 DEEP_CACHED
+  ↓
+SERVING
 ```
+
+States represent observations.
+
+They do not represent commands.
 
 ---
 
@@ -129,8 +135,8 @@ STAC Item available
 
 The system can inspect:
 
-- assets
 - metadata
+- assets
 - PMTiles availability
 
 ---
@@ -141,7 +147,7 @@ A PMTiles archive exists.
 
 Materialization may occur through Tilepack.
 
-Example:
+Examples:
 
 ```
 Tilepack READY
@@ -159,19 +165,18 @@ A PMTiles URL is available.
 
 ## SHALLOW_CACHED
 
-The resource is servable through Martin.
+The resource can be incorporated into a Martin configuration using a remote PMTiles archive.
 
 Example:
 
 ```
-remote PMTiles URL
-  → Martin config.json
-  → Martin runtime
+STAC PMTiles URL
+  → config.json
 ```
 
 The PMTiles archive is not stored locally.
 
-The system depends on remote availability.
+The system remains dependent on remote infrastructure.
 
 ---
 
@@ -191,29 +196,32 @@ Deep Cache always takes precedence over Shallow Cache.
 
 ---
 
-## Preferred State
+## SERVING
 
-The preferred steady state is:
+The resource is actively being served by Martin.
+
+Example:
 
 ```
-DEEP_CACHED
+PMTiles
+  → config.json
+  → Martin
+  → tiles endpoint
 ```
 
-because:
+A resource reaches SERVING when it is available through an active Martin process.
 
-- network dependency is reduced
-- startup becomes deterministic
-- cache ownership becomes local
+SERVING is an operational state.
 
 ---
 
 ## State Discovery
 
-The current state is discovered dynamically.
+The current state is derived dynamically.
 
 No persistent state database exists.
 
-C.R.E.A.M. derives state through observation.
+State is inferred through observation.
 
 Examples:
 
@@ -230,7 +238,11 @@ assets.pmtiles exists
 ```
 
 ```
-Martin runtime available
+Martin process active
+```
+
+```
+Martin serving tileset <id>
 ```
 
 ---
@@ -239,7 +251,7 @@ Martin runtime available
 
 Commands describe desired states.
 
-They do not directly describe procedures.
+They do not describe procedures.
 
 Example:
 
@@ -253,10 +265,16 @@ does not mean:
 run Tilepack
 ```
 
+or
+
+```
+start Martin
+```
+
 Instead it means:
 
 ```
-make resource servable
+ensure resource is SERVING
 ```
 
 The system determines the required transitions.
@@ -283,6 +301,7 @@ may internally perform:
 resolve
   → materialize
   → shallow cache
+  → serve
 ```
 
 For a resource in:
@@ -294,7 +313,8 @@ MATERIALIZED
 the same command may perform:
 
 ```
-shallow cache only
+shallow cache
+  → serve
 ```
 
 For a resource in:
@@ -307,7 +327,7 @@ the same command may perform:
 
 ```
 generate config
-  → run Martin
+  → serve
 ```
 
 No unnecessary transitions should occur.
@@ -316,7 +336,7 @@ No unnecessary transitions should occur.
 
 ## Multi-Resource State
 
-A cache operation may target multiple identifiers.
+A cache operation may target multiple resources.
 
 Example:
 
@@ -327,13 +347,13 @@ just cache <id1> <id2> <id3>
 The desired state becomes:
 
 ```
-SERVABLE SET
+SERVING SET
 ```
 
 rather than:
 
 ```
-SERVABLE RESOURCE
+SERVING RESOURCE
 ```
 
 Each resource is reconciled independently.
@@ -370,6 +390,30 @@ Shallow Cache PMTiles URLs
 
 may coexist within the same generated configuration.
 
+The configuration exists only to support the SERVING state.
+
+---
+
+## Preferred States
+
+The preferred storage state is:
+
+```
+DEEP_CACHED
+```
+
+The preferred operational state is:
+
+```
+SERVING
+```
+
+These goals are complementary.
+
+Deep Cache improves resilience.
+
+SERVING fulfills user intent.
+
 ---
 
 ## State Ownership
@@ -402,13 +446,11 @@ Cache
 Martin
 ```
 
-The direction of execution flows downward.
+Execution flows downward.
 
-The direction of authority flows upward.
+Authority flows upward.
 
-Cache remains the controlling layer.
-
-This principle defines the entire system.
+Cache remains the controlling abstraction.
 
 ```
 C.R.E.A.M.
