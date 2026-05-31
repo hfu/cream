@@ -20,9 +20,13 @@ It does not define how cache is implemented.
 Cache Rules Everything Around Me.
 ```
 
-The system exists to achieve and maintain desired cache states.
+The system exists to reconcile resources into a desired cache state.
 
 Tilepack, STAC, PMTiles, and Martin are supporting mechanisms.
+
+The user interacts with cache.
+
+Cache interacts with everything else.
 
 ---
 
@@ -56,7 +60,6 @@ Example:
 ```
 STAC
   → PMTiles URL
-  → Martin
 ```
 
 Characteristics:
@@ -82,7 +85,7 @@ Characteristics:
 
 - locally owned artifact
 - reduced network dependency
-- reproducible startup behavior
+- reproducible operation
 
 ---
 
@@ -111,10 +114,10 @@ the local PMTiles archive must be used.
 The primary desired state is:
 
 ```
-SERVABLE
+SERVING
 ```
 
-A resource is servable when Martin can expose it as a tileset.
+A resource is considered available when it is actively being served through Martin.
 
 The implementation path is irrelevant.
 
@@ -132,7 +135,7 @@ remote PMTiles
   → Martin
 ```
 
-both satisfy SERVABLE.
+both satisfy SERVING.
 
 ---
 
@@ -151,45 +154,37 @@ It does not describe procedure.
 The command means:
 
 ```
-ensure all specified resources are SERVABLE
+ensure all specified resources are SERVING
 ```
+
+The implementation strategy is determined dynamically.
 
 ---
 
-## State Reconciliation
+## Reconciliation Principle
 
-The cache command reconciles observed state with desired state.
+Cache reconciliation is state-driven.
 
-Example:
+The current state is observed.
 
-```
-desired state:
-  SERVABLE
-```
-
-Current state may be:
+The desired state is:
 
 ```
-UNRESOLVED
+SERVING
 ```
 
-```
-RESOLVED
-```
+The system computes the required transitions.
 
-```
-MATERIALIZED
-```
+The user does not need to specify:
 
-```
-SHALLOW_CACHED
-```
+- STAC lookup
+- Tilepack execution
+- PMTiles discovery
+- Martin installation
+- configuration generation
+- Martin startup
 
-```
-DEEP_CACHED
-```
-
-The system determines the required transitions.
+These are implementation details.
 
 ---
 
@@ -215,13 +210,13 @@ DEEP_CACHED
 
 is achieved.
 
-No remote lookup is required.
+The local artifact becomes authoritative.
 
 ---
 
 ### Step 2
 
-Resolve STAC Item.
+Resolve the STAC Item.
 
 Discover PMTiles availability.
 
@@ -231,7 +226,7 @@ Example:
 assets.pmtiles.href
 ```
 
-If present:
+If available:
 
 ```
 SHALLOW_CACHED
@@ -243,7 +238,7 @@ may be established.
 
 ### Step 3
 
-If PMTiles does not exist:
+If PMTiles is unavailable:
 
 ```
 Tilepack materialization
@@ -251,24 +246,48 @@ Tilepack materialization
 
 may be triggered.
 
-The resulting PMTiles archive is then discovered through STAC.
+Materialization continues until PMTiles becomes discoverable.
 
 ---
 
 ### Step 4
 
-Generate Martin runtime configuration.
+Ensure Martin is available.
+
+If Martin is not installed:
+
+```
+cargo install martin --locked
+```
+
+may be executed automatically.
+
+Installation is considered part of reconciliation.
 
 ---
 
 ### Step 5
 
-Ensure Martin serves the resource.
+Generate runtime configuration.
 
-Result:
+Example:
 
 ```
-SERVABLE
+./config.json
+```
+
+The configuration is generated dynamically from the reconciled cache state.
+
+---
+
+### Step 6
+
+Start Martin.
+
+The resource enters:
+
+```
+SERVING
 ```
 
 ---
@@ -286,12 +305,12 @@ just cache <id1> <id2> <id3>
 The desired state becomes:
 
 ```
-SERVABLE SET
+SERVING SET
 ```
 
-Each resource is evaluated independently.
+Each resource is reconciled independently.
 
-The resulting Martin configuration is generated from the combined result.
+The resulting Martin configuration is generated from the combined state.
 
 ---
 
@@ -303,18 +322,22 @@ The file:
 ./config.json
 ```
 
-is generated dynamically.
+is a runtime artifact.
 
-It is not persistent system state.
+It is generated every time cache reconciliation occurs.
 
-It is a runtime artifact.
+It is not part of the repository.
 
-The file may contain:
+It should normally be ignored by version control.
 
-- Deep Cache PMTiles
-- Shallow Cache PMTiles
+Example:
 
-simultaneously.
+```
+.cache/
+config.json
+```
+
+may be entirely reconstructed from resource identifiers.
 
 ---
 
@@ -326,23 +349,23 @@ The command:
 just get <id...>
 ```
 
-has different semantics.
-
-It is procedural.
+has procedural semantics.
 
 The command means:
 
 ```
-download PMTiles into Deep Cache
+materialize and store PMTiles locally
 ```
 
-Example:
+Result:
 
 ```
 ./cache/<id>.pmtiles
 ```
 
-Unlike cache, get is concerned with storage.
+The command targets Deep Cache.
+
+Unlike cache, it does not imply serving.
 
 ---
 
@@ -366,9 +389,67 @@ may be removed.
 
 Future cache operations may fall back to Shallow Cache.
 
-The command affects cache ownership.
+The command affects cache ownership only.
 
-It does not affect STAC or Tilepack state.
+It does not modify:
+
+- STAC
+- Tilepack
+- PMTiles on remote storage
+
+---
+
+## The install Command
+
+The command:
+
+```
+just install
+```
+
+is optional.
+
+It exists primarily for maintenance and diagnostics.
+
+Example:
+
+```
+cargo install martin --locked
+```
+
+The cache command may perform the same action automatically.
+
+Users are not expected to run install during normal operation.
+
+---
+
+## Process Lifecycle
+
+The cache command is responsible for reaching the SERVING state.
+
+Example:
+
+```
+just cache <id>
+```
+
+may eventually result in:
+
+```
+martin --config config.json
+```
+
+running interactively.
+
+Martin remains active until terminated.
+
+Example:
+
+```
+Ctrl-C
+```
+
+No dedicated shutdown command is required.
 
 ---
 
@@ -382,15 +463,17 @@ Examples:
 just cache <id>
 ```
 
-may be executed repeatedly.
-
 ```
 just get <id>
 ```
 
+```
+just forget <id>
+```
+
 may be executed repeatedly.
 
-Repeated execution should not change the resulting cache state.
+Repeated execution should converge toward the same state.
 
 ---
 
@@ -398,7 +481,7 @@ Repeated execution should not change the resulting cache state.
 
 Cache reconciliation should be observable.
 
-Example:
+Examples:
 
 ```
 [cache] deep cache found
@@ -409,7 +492,11 @@ Example:
 ```
 
 ```
-[cache] tilepack materialization required
+[cache] materialization required
+```
+
+```
+[cache] installing martin
 ```
 
 ```
@@ -417,10 +504,14 @@ Example:
 ```
 
 ```
-[cache] martin ready
+[cache] starting martin
 ```
 
-The system should explain how SERVABLE was achieved.
+```
+[cache] serving
+```
+
+The system should explain how the desired state was achieved.
 
 ---
 
